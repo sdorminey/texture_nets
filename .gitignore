@@ -10,3 +10,6 @@ data/*/*
 
 !data/textures
 !data/textures/*
+
+.*.sw*
+gen/*

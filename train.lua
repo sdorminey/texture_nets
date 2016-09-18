@@ -40,6 +40,7 @@ cmd:option('-mode', 'style', 'style|texture')
 
 cmd:option('-checkpoints_path', 'data/checkpoints/', 'Directory to store intermediate results.')
 cmd:option('-model', 'pyramid', 'Path to generator model description file.')
+cmd:option('-starting_checkpoint', '', 'Starting checkpoint to use.')
 
 cmd:option('-vgg_no_pad', 'false')
 cmd:option('-normalization', 'instance', 'batch|instance')
@@ -111,7 +112,19 @@ end
 trainLoader, valLoader = DataLoader.create(params)
 
 -- Define model
-local net = require('models/' .. params.model):type(dtype)
+local net = nil
+if params.starting_checkpoint == '' then
+    print('No starting checkpoint given.')
+    net = require('models/' .. params.model):type(dtype)
+else
+    print('Using starting checkpoint.')
+    net = torch.load(params.starting_checkpoint)
+    if params.backend == 'cudnn' then
+      net = cudnn.convert(net, nn)
+      net:type(dtype)
+    end
+end
+
 local criterion = nn.ArtisticCriterion(params)
 
 ----------------------------------------------------------
