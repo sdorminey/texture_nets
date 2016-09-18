@@ -21,10 +21,9 @@ local cmd = torch.CmdLine()
 cmd:option('-content_layers', 'relu4_2', 'Layer to attach content loss.')
 cmd:option('-style_layers', 'relu1_1,relu2_1,relu3_1,relu4_1', 'Layer to attach style loss.')
 
-cmd:option('-learning_rate', 1e-3)
+cmd:option('-learning_rate', 1e-3, 'Learning rate. Should be reduced to 80% every 2000 iterations.')
 
 cmd:option('-num_iterations', 50000, 'Number of steps to perform.')
-cmd:option('-save_every', 1000, 'Save model every N iterations.')
 cmd:option('-batch_size', 1)
 
 cmd:option('-image_size', 256, 'Training images size')
@@ -38,7 +37,7 @@ cmd:option('-style_size', 256, 'Resize style image to this size, no resize if 0.
 
 cmd:option('-mode', 'style', 'style|texture')
 
-cmd:option('-checkpoints_path', 'data/checkpoints/', 'Directory to store intermediate results.')
+cmd:option('-out', 'data/checkpoints/out.t7', 'Directory to store checkpoint.')
 cmd:option('-model', 'pyramid', 'Path to generator model description file.')
 cmd:option('-starting_checkpoint', '', 'Starting checkpoint to use.')
 
@@ -186,33 +185,17 @@ for it = 1, params.num_iterations do
   -- Optimization step
   optim_method(feval, parameters, state)
 
-  -- Visualize
+  -- GC.
   if it%50 == 0 then
     collectgarbage()
-
-    local output = net.output:double()
-    local imgs  = {}
-    for i = 1, output:size(1) do
-      local img = deprocess(output[i])
-      table.insert(imgs, torch.clamp(img,0,1))
-    end
-    if use_display then 
-      display.image(target_for_display, {win=1, width=512,title = 'Target'})
-      display.image(imgs, {win=0, width=512})
-      display.plot(loss_history, {win=2, labels={'iteration', 'Loss'}})
-    end
   end
   
-  if it%2000 == 0 then 
-    state.learningRate = state.learningRate*0.8
-  end
-
   -- Dump net
-  if it%params.save_every == 0 or it == params.num_iterations then 
+  if it == params.num_iterations then 
     local net_to_save = deepCopy(net):float():clearState()
     if params.backend == 'cudnn' then
       net_to_save = cudnn.convert(net_to_save, nn)
     end
-    torch.save(paths.concat(params.checkpoints_path, 'model_' .. it .. '.t7'), net_to_save)
+    torch.save(paths.concat(params.out), net_to_save)
   end
 end
