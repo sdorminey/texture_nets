@@ -2,13 +2,14 @@ require 'nn'
 require 'image'
 require 'InstanceNormalization'
 require 'src/utils'
+require 'lfs'
 
 local cmd = torch.CmdLine()
 
-cmd:option('-input_image', '', 'Image to stylize.')
+cmd:option('-input_path', '', 'Paths of image to stylize.')
 cmd:option('-image_size', 0, 'Resize input image to. Do not resize if 0.')
 cmd:option('-model_t7', '', 'Path to trained model.')
-cmd:option('-save_path', 'stylized.jpg', 'Path to save stylized image.')
+cmd:option('-save_path', '', 'Path to save stylized image.')
 cmd:option('-cpu', false, 'use this flag to run on CPU')
 
 local params = cmd:parse(arg)
@@ -31,15 +32,25 @@ model:type(tp)
 model:evaluate()
 
 -- Load image and scale
-local img = image.load(params.input_image, 3):float()
-if params.image_size > 0 then
-  img = image.scale(img, params.image_size, params.image_size)
+for file in lfs.dir(params.input_path) do
+  local file_path = params.input_path .. '/' .. file
+  print(file_path)
+  if lfs.attributes(file_path, "mode") == "file" then
+    print("Processing image " .. file)
+
+    -- Load
+    local img = image.load(file_path, 3):float()
+    if params.image_size > 0 then
+      img = image.scale(img, params.image_size, params.image_size)
+    end
+
+    -- Stylize
+    local input = img:add_dummy()
+    local stylized = model:forward(input:type(tp)):double()
+    stylized = deprocess(stylized[1])
+
+    -- Save
+    image.save(params.save_path .. '/' .. file, torch.clamp(stylized,0,1))
+  end
 end
 
--- Stylize
-local input = img:add_dummy()
-local stylized = model:forward(input:type(tp)):double()
-stylized = deprocess(stylized[1])
-
--- Save
-image.save(params.save_path, torch.clamp(stylized,0,1))
