@@ -158,11 +158,15 @@ function feval(x)
   local raw_input = images.input:type(dtype)
 
   -- Insert fader channel, where all values are the fader value.
+  -- Mask is needed so we don't get hit by normalization.
+  local mask = torch.CudaByteTensor({{{0, 1}, {1, 0}}})
+  mask = mask:repeatTensor(1, raw_input:size(3)/2, raw_input:size(4)/2)
+
   local images_input = raw_input:clone()
   images_input:resize(images_input:size(1), 1+images_input:size(2), images_input:size(3), images_input:size(4))
   images_input:zero()
-  images_input:sub(1, -1, 2, 4):copy(raw_input)
-  images_input:select(2, 1):fill(texture_strength*128)
+  images_input:sub(1, -1, 1, 3):copy(raw_input)
+  images_input[1]:select(1, 4):maskedFill(mask, texture_strength-1) -- We want -1 to 1.
 
   -- Forward
   local out = net:forward(images_input)

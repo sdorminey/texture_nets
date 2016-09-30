@@ -9,7 +9,8 @@ cmd:option('-batch', false, 'Run in batch mode')
 cmd:option('-input', '', 'Paths of image to stylize.')
 cmd:option('-output', '', 'Path to save stylized image.')
 cmd:option('-model_t7', '', 'Path to trained model.')
-cmd:option('-fader', 1, 'Value of fader, in single mode')
+cmd:option('-fader1', 0, 'Value of fader, in single mode')
+cmd:option('-fader2', 2, 'Value of fader, in single mode')
 cmd:option('-period', 50, 'Number of frames between fader periods.')
 cmd:option('-cpu', false, 'use this flag to run on CPU')
 
@@ -34,28 +35,45 @@ model:evaluate()
 
 local index = 0
 
-function style_image(source, dest, fader)
-  print("Processing image " .. source .. "with fader " .. tostring(fader))
-  weights, gradWeights = model:parameters()
-  print(weights[1])
-
-  -- Load
-  local source_img = image.load(source, 3):float()
-
+function eval(source_img, fader)
   -- Insert fader channel.
   local img = source_img:clone()
   img:resize(1, 1+img:size(1), img:size(2), img:size(3))
   img:zero()
   img:sub(1, -1, 1, 3):copy(source_img)
-  img:select(2,4):fill(fader)
+
+  -- Mask is needed so we don't get hit by normalization.
+  local mask = torch.CudaByteTensor({{{0, 1}, {1, 0}}})
+  mask = mask:repeatTensor(1, raw_input:size(3)/2, raw_input:size(4)/2)
+  img[1]:select(1, 4):maskedFill(mask, fader)
 
   -- Stylize
   local input = img
   local stylized = model:forward(input:type(tp)):double()
   stylized = deprocess(stylized[1])
 
+  local conv_nodes = model:findModules('cudnn.SpatialConvolution')
+  local out1 = conv_nodes[1].output
+  local view = out1:squeeze():view(32,-1)
+  print('min: ', view:min(), 'max:', view:max())
+
+  return stylized
+end
+
+function compare_images(source, dest, fader1, fader2)
+  print("Processing image " .. source .. "with faders " .. tostring(fader1) .. ' and ' .. tostring(fader2))
+  weights, gradWeights = model:parameters()
+
+  -- Load
+  local source_img = image.load(source, 3):float()
+
+  local v1 = eval(source_img, fader1)
+  local v2 = eval(source_img, fader2)
+  local diff = v1-v2
+  print('diff min:', diff:min(), 'diff max:', diff:max())
+
   -- Save
-  image.save(dest, torch.clamp(stylized,0,1))
+  image.save(dest, torch.clamp(torch.abs(diff),0,1))
 end
 
 if params.batch then
@@ -75,5 +93,5 @@ if params.batch then
       index = index+1
     end
 else
-  style_image(params.input, params.output, params.fader)
+  compare_images(params.input, params.output, params.fader1, params.fader2)
 end
