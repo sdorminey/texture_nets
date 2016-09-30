@@ -1,8 +1,8 @@
 local ContentLoss, parent = torch.class('nn.ContentLoss', 'nn.Module')
 
-function ContentLoss:__init(strength, normalize)
+function ContentLoss:__init(normalize)
   parent.__init(self)
-  self.strength = strength
+  self.strength = 0
   self.target = torch.Tensor()
   self.normalize = normalize or false
   self.loss = 0

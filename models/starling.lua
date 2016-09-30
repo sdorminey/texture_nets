@@ -29,12 +29,12 @@ if params.mode == 'texture' then
 end
 
 model:add(pad(4, 4, 4, 4))
-model:add(backend.SpatialConvolution(3, 32, 9, 9, 1, 1, 0, 0))
+model:add(backend.SpatialConvolution(4, 32, 9, 9, 1, 1, 0, 0))
 model:add(normalization(32))
 model:add(nn.ReLU(true))
 
 -- probably need replication padding here too
-model:add(backend.SpatialConvolution(32, 64,  3, 3, 2, 2, 1, 1))
+model:add(backend.SpatialConvolution(32, 64, 3, 3, 2, 2, 1, 1))
 model:add(normalization(64))
 model:add(nn.ReLU(true))
 

@@ -13,3 +13,5 @@ data/*/*
 
 .*.sw*
 gen/*
+in/*
+out/*

@@ -12,6 +12,22 @@ function ArtisticCriterion:__init(params)
    self.gradInput = nil
 end
 
+function ArtisticCriterion:updateStrength(texture, content)
+  if #self.texture_modules > 0 then
+    for k, module in pairs(self.texture_modules) do
+      print('Updating texture ', k, ' to ', texture)
+      module.strength = texture
+    end
+  end
+
+  if #self.content_modules > 0 then
+    for k, module in pairs(self.content_modules) do
+      print('Updating content ', k, ' to ', texture)
+      module.strength = content
+    end
+  end
+end
+
 function ArtisticCriterion:updateOutput(input)
 
   local pred = input[1]
@@ -103,7 +119,7 @@ function create_descriptor_net(params)
         print("Setting up content layer", i, ":", layer.name)
 
         local norm = false
-        local loss_module = nn.ContentLoss(params.content_weight, norm):type(dtype)
+        local loss_module = nn.ContentLoss(norm):type(dtype)
         net:add(loss_module)
         table.insert(content_modules, loss_module)
         next_content_idx = next_content_idx + 1
@@ -121,7 +137,7 @@ function create_descriptor_net(params)
         target:div(target_features[1]:nElement())
 
         local norm = params.normalize_gradients
-        local loss_module = nn.TextureLoss(params.texture_weight, target, norm):type(dtype)
+        local loss_module = nn.TextureLoss(target, norm):type(dtype)
         
         net:add(loss_module)
         table.insert(texture_modules, loss_module)

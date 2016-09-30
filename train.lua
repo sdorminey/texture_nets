@@ -144,13 +144,25 @@ function feval(x)
   gradParameters:zero()
   
   local loss = 0
+
+  -- Pick random values for texture and content strength.
+  local texture_strength = torch.uniform(torch.Generator(), 0, 2)
+  local content_strength = 2 - texture_strength
+  criterion:updateStrength(texture_strength, content_strength)
   
   -- Get batch 
   local images = trainLoader:get()
 
   target_for_display = images.target
   local images_target = preprocess_many(images.target):type(dtype)
-  local images_input = images.input:type(dtype)
+  local raw_input = images.input:type(dtype)
+
+  -- Insert fader channel, where all values are the fader value.
+  local images_input = raw_input:clone()
+  images_input:resize(images_input:size(1), 1+images_input:size(2), images_input:size(3), images_input:size(4))
+  images_input:zero()
+  images_input:sub(1, -1, 2, 4):copy(raw_input)
+  images_input:select(2, 1):fill(texture_strength*128)
 
   -- Forward
   local out = net:forward(images_input)
@@ -163,7 +175,7 @@ function feval(x)
   loss = loss/params.batch_size
   
   table.insert(loss_history, {iteration,loss})
-  print('#it: ', iteration, 'loss: ', loss)
+  print('#it: ', iteration, 'loss: ', loss, 'texture_strength: ', texture_strength, 'content_strength: ', content_strength)
   return loss, gradParameters
 end
 
@@ -171,9 +183,6 @@ end
 -- Optimize
 ----------------------------------------------------------
 print('        Optimize        ')
-
-style_weight_cur = params.style_weight
-content_weight_cur = params.content_weight
 
 local optim_method = optim.adam
 local state = {
