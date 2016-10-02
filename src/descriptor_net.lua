@@ -1,5 +1,7 @@
+require 'image'
 require 'src/content_loss'
 require 'src/texture_loss'
+local t = require 'datasets/transforms'
 
 require 'loadcaffe'
 
@@ -25,6 +27,44 @@ function ArtisticCriterion:updateStrength(texture, content)
       print('Updating content ', k, ' to ', content)
       module.strength = content
     end
+  end
+end
+
+--counter = 0
+function ArtisticCriterion:updateStyle(full_texture_image, image_size)
+  -- Random crop.
+  local texture_image = t.RandomCrop(image_size)(full_texture_image)
+--  counter = counter+1
+--  image.save('texture-'..tostring(counter)..'.jpg', texture_image)
+  texture_image = texture_image:type(dtype):add_dummy()
+
+  -- Compute Gram matrix in each style layer.
+  local gram = GramMatrix():type(dtype)
+
+  -- Disable the texture loss modules, so that they just record the output of the texture layer in their output field.
+  for k, module in pairs(self.texture_modules) do
+    module.active = false
+  end
+
+  -- Run network forward to capture texture layer responses.
+  self.descriptor_net:forward(texture_image)
+
+  for k, module in pairs(self.texture_modules) do
+    print('Updating texture style ', k)
+
+    module.active = true
+
+    -- Assign target to the layer's output when it was in that mode.
+    local target = gram:forward(nn.View(-1):type(dtype):setNumInputDims(2):forward(module.output)) -- used to be target_features[1]
+    if module.target then
+      module.target:resizeAs(target)
+      module.target:copy(target)
+    else
+      module.target = target:clone()
+    end
+
+    module.target:div(module.output:nElement())
+    module.target = module.target:add_dummy()
   end
 end
 
@@ -82,14 +122,6 @@ function create_descriptor_net(params)
 
   local cnn = loadcaffe.load(params.proto_file, params.model_file, params.backend):type(dtype)
 
-  -- load texture
-  local style_size = math.ceil(params.style_scale * params.image_size)
-  local texture_image = image.load(params.texture, 3)
-  if params.style_scale > 0 then 
-    texture_image = image.scale(texture_image, style_size, 'bilinear'):float()
-  end
-  local texture_image = preprocess(texture_image):type(dtype):add_dummy()
-
   local content_layers = params.content_layers:split(",") 
   local texture_layers  = params.texture_layers:split(",")
 
@@ -130,15 +162,9 @@ function create_descriptor_net(params)
       ---------------------------------
       if name == texture_layers[next_texture_idx] then
         print("Setting up texture layer  ", i, ":", layer.name)
-        local gram = GramMatrix():type(dtype)
-
-        local target_features = net:forward(texture_image):clone()
-        local target = gram:forward(nn.View(-1):type(dtype):setNumInputDims(2):forward(target_features[1])):clone()
-
-        target:div(target_features[1]:nElement())
 
         local norm = params.normalize_gradients
-        local loss_module = nn.TextureLoss(target, norm):type(dtype)
+        local loss_module = nn.TextureLoss(norm):type(dtype)
         
         net:add(loss_module)
         table.insert(texture_modules, loss_module)

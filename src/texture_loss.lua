@@ -11,14 +11,11 @@ end
 
 local TextureLoss, parent = torch.class('nn.TextureLoss', 'nn.Module')
 
-function TextureLoss:__init(target, normalize)
+function TextureLoss:__init(normalize)
   parent.__init(self)
   self.normalize = normalize or false
   self.strength = 0
 
-  local tsz = target:size()
-  self.target = target:add_dummy()
-  
   self.loss = 0
 
   self.gram = GramMatrix()

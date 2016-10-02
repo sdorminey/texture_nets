@@ -23,10 +23,10 @@ cmd:option('-style_layers', 'relu1_1,relu2_1,relu3_1,relu4_1,relu5_1', 'Layer to
 
 cmd:option('-learning_rate', 1e-3, 'Learning rate. Should be reduced to 80% every 2000 iterations.')
 
-cmd:option('-num_iterations', 50000, 'Number of steps to perform.')
+cmd:option('-num_iterations', 10, 'Number of steps to perform.')
 cmd:option('-batch_size', 1)
 
-cmd:option('-image_size', 480, 'Training images size')
+cmd:option('-image_size', 256, 'Training images size')
 
 cmd:option('-content_weight', 1)
 cmd:option('-style_weight', 1)
@@ -47,7 +47,7 @@ cmd:option('-normalization', 'instance', 'batch|instance')
 cmd:option('-proto_file', 'data/pretrained/VGG_ILSVRC_19_layers_deploy.prototxt', 'Pretrained')
 cmd:option('-model_file', 'data/pretrained/VGG_ILSVRC_19_layers.caffemodel')
 
-cmd:option('-fader_max', 0.025, 'Max value of fader.')
+cmd:option('-fader_max', 0.005, 'Max value of fader.')
 cmd:option('-backend', 'cudnn', 'backend to use.')
 
 -- Dataloader
@@ -126,6 +126,13 @@ else
     end
 end
 
+-- load texture
+local full_texture_image = image.load(params.texture, 3):float()
+if params.style_scale > 0 and params.style_scale ~= 1 then 
+  full_texture_image = image.scale(full_texture_image, params.style_scale*full_texture_image:size(2), 'bilinear'):float()
+end
+local full_texture_image = preprocess(full_texture_image)
+
 local criterion = nn.ArtisticCriterion(params)
 
 ----------------------------------------------------------
@@ -158,6 +165,9 @@ function feval(x)
   local texture_strength = 1000 -- Denominator!
   local content_strength = ((fader+1)/2)*params.fader_max*1000
   criterion:updateStrength(texture_strength, content_strength)
+
+  -- Update the criterion with a random crop of the style image.
+  criterion:updateStyle(full_texture_image, params.image_size)
   
   -- Get batch 
   local images = trainLoader:get()

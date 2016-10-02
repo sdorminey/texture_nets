@@ -82,7 +82,6 @@ function M.RandomCrop(size, padding)
          return input
       end
 
-
       local x1, y1 = torch.random(0, w - size_w), torch.random(0, h - size_h)
       local out = image.crop(input, x1, y1, x1 + size_w, y1 + size_h)
       assert(out:size(2) == size_h and out:size(3) == size_w, 'wrong crop size')
