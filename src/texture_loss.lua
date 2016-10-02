@@ -38,7 +38,7 @@ function TextureLoss:updateOutput(input)
 
     self.G = self.gram:forward(input3d)
     self.G:div(input[1]:nElement())
-    self.match_to = self.target:expandAs(self.G)
+    self.match_to = self.target:expandAs(self.G) -- Suspect? Not in JJ's code.
     
     self.loss = self.crit:forward(self.G, self.match_to)
     self.loss = self.loss * self.strength

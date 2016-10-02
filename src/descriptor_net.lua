@@ -22,7 +22,7 @@ function ArtisticCriterion:updateStrength(texture, content)
 
   if #self.content_modules > 0 then
     for k, module in pairs(self.content_modules) do
-      print('Updating content ', k, ' to ', texture)
+      print('Updating content ', k, ' to ', content)
       module.strength = content
     end
   end
@@ -83,9 +83,10 @@ function create_descriptor_net(params)
   local cnn = loadcaffe.load(params.proto_file, params.model_file, params.backend):type(dtype)
 
   -- load texture
+  local style_size = math.ceil(params.style_scale * params.image_size)
   local texture_image = image.load(params.texture, 3)
-  if params.style_size > 0 then 
-    texture_image = image.scale(texture_image, params.style_size, 'bicubic'):float()
+  if params.style_scale > 0 then 
+    texture_image = image.scale(texture_image, style_size, 'bilinear'):float()
   end
   local texture_image = preprocess(texture_image):type(dtype):add_dummy()
 

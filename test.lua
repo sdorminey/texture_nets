@@ -6,6 +6,7 @@ require 'src/utils'
 local cmd = torch.CmdLine()
 
 cmd:option('-batch', false, 'Run in batch mode')
+cmd:option('-compare', false, 'Run in compare mode')
 cmd:option('-input', '', 'Paths of image to stylize.')
 cmd:option('-output', '', 'Path to save stylized image.')
 cmd:option('-model_t7', '', 'Path to trained model.')
@@ -43,8 +44,8 @@ function eval(source_img, fader)
   img:sub(1, -1, 1, 3):copy(source_img)
 
   -- Mask is needed so we don't get hit by normalization.
-  local mask = torch.CudaByteTensor({{{0, 1}, {1, 0}}})
-  mask = mask:repeatTensor(1, raw_input:size(3)/2, raw_input:size(4)/2)
+  local mask = torch.ByteTensor({{{0, 1}, {1, 0}}})
+  mask = mask:repeatTensor(1, img:size(3)/2, img:size(4)/2)
   img[1]:select(1, 4):maskedFill(mask, fader)
 
   -- Stylize
@@ -76,6 +77,19 @@ function compare_images(source, dest, fader1, fader2)
   image.save(dest, torch.clamp(torch.abs(diff),0,1))
 end
 
+function apply(source, dest, fader)
+  print("Processing image " .. source .. "with fader " .. tostring(fader))
+  weights, gradWeights = model:parameters()
+
+  -- Load
+  local source_img = image.load(source, 3):float()
+
+  local stylized = eval(source_img, fader)
+
+  -- Save
+  image.save(dest, torch.clamp(torch.abs(stylized),0,1))
+end
+
 if params.batch then
     local files = {}
     for file in paths.iterfiles(params.input) do table.insert(files, file) end
@@ -85,13 +99,15 @@ if params.batch then
       local source = paths.concat(params.input, file)
       local dest = paths.concat(params.output, file)
 
-      -- Fader cycles between 0 and 2 every period.
-      local fader = torch.sin((2*math.pi/params.period)*index)+1
+      -- Fader cycles between 1 and -1 every period.
+      local fader = torch.sin((2*math.pi/params.period)*index)
 
-      style_image(source, dest, fader)
+      apply(source, dest, fader)
 
       index = index+1
     end
-else
+elseif params.compare then
   compare_images(params.input, params.output, params.fader1, params.fader2)
+else
+  apply(params.input, params.output, params.fader1)
 end

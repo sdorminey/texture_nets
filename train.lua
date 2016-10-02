@@ -19,26 +19,26 @@ end
 local cmd = torch.CmdLine()
 
 cmd:option('-content_layers', 'relu4_2', 'Layer to attach content loss.')
-cmd:option('-style_layers', 'relu1_1,relu2_1,relu3_1,relu4_1', 'Layer to attach style loss.')
+cmd:option('-style_layers', 'relu1_1,relu2_1,relu3_1,relu4_1,relu5_1', 'Layer to attach style loss.')
 
 cmd:option('-learning_rate', 1e-3, 'Learning rate. Should be reduced to 80% every 2000 iterations.')
 
 cmd:option('-num_iterations', 50000, 'Number of steps to perform.')
 cmd:option('-batch_size', 1)
 
-cmd:option('-image_size', 256, 'Training images size')
+cmd:option('-image_size', 480, 'Training images size')
 
 cmd:option('-content_weight', 1)
 cmd:option('-style_weight', 1)
-cmd:option('-tv_weight', 0, 'Total variation weight.')
+cmd:option('-tv_weight', 0.001, 'Total variation weight.')
 
 cmd:option('-style_image', '', 'Path to style image')
-cmd:option('-style_size', 256, 'Resize style image to this size, no resize if 0.')
+cmd:option('-style_scale', 1.0)
 
 cmd:option('-mode', 'style', 'style|texture')
 
 cmd:option('-out', 'data/checkpoints/out.t7', 'Directory to store checkpoint.')
-cmd:option('-model', 'pyramid', 'Path to generator model description file.')
+cmd:option('-model', 'starling', 'Path to generator model description file.')
 cmd:option('-starting_checkpoint', '', 'Starting checkpoint to use.')
 
 cmd:option('-vgg_no_pad', 'false')
@@ -46,7 +46,9 @@ cmd:option('-normalization', 'instance', 'batch|instance')
 
 cmd:option('-proto_file', 'data/pretrained/VGG_ILSVRC_19_layers_deploy.prototxt', 'Pretrained')
 cmd:option('-model_file', 'data/pretrained/VGG_ILSVRC_19_layers.caffemodel')
-cmd:option('-backend', 'cudnn', 'nn|cudnn')
+
+cmd:option('-fader_max', 0.025, 'Max value of fader.')
+cmd:option('-backend', 'cudnn', 'backend to use.')
 
 -- Dataloader
 cmd:option('-dataset', 'style')
@@ -72,7 +74,7 @@ else
   
   if params.backend == 'cudnn' then
     require 'cudnn'
-    cudnn.fastest = true
+--  cudnn.fastest = true
     cudnn.benchmark = true
     backend = cudnn
   else
@@ -145,9 +147,16 @@ function feval(x)
   
   local loss = 0
 
+  -- Fader (range [-1, 1]) determines the mix of style and content.
+  -- -1 -> 0 (all content, no style.)
+  --  1 -> fader_max (max ratio between style and content.)
+  local fader = torch.uniform(torch.Generator(), -1, 1)
+
+  -- fader_max controls the ratio between style and content.
+
   -- Pick random values for texture and content strength.
-  local texture_strength = torch.uniform(torch.Generator(), 0, 2)
-  local content_strength = 2 - texture_strength
+  local texture_strength = 1000 -- Denominator!
+  local content_strength = ((fader+1)/2)*params.fader_max*1000
   criterion:updateStrength(texture_strength, content_strength)
   
   -- Get batch 
@@ -168,10 +177,12 @@ function feval(x)
   images_input:sub(1, -1, 1, 3):copy(raw_input)
   images_input[1]:select(1, 4):maskedFill(mask, texture_strength-1) -- We want -1 to 1.
 
+  collectgarbage()
   -- Forward
   local out = net:forward(images_input)
   loss = loss + criterion:forward({out, images_target})
   
+  collectgarbage()
   -- Backward
   local grad = criterion:backward({out, images_target}, nil)
   net:backward(images_input, grad[1])
