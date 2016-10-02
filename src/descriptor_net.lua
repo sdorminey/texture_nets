@@ -17,14 +17,14 @@ end
 function ArtisticCriterion:updateStrength(texture, content)
   if #self.texture_modules > 0 then
     for k, module in pairs(self.texture_modules) do
-      print('Updating texture ', k, ' to ', texture)
+--    print('Updating texture ', k, ' to ', texture)
       module.strength = texture
     end
   end
 
   if #self.content_modules > 0 then
     for k, module in pairs(self.content_modules) do
-      print('Updating content ', k, ' to ', content)
+--    print('Updating content ', k, ' to ', content)
       module.strength = content
     end
   end
@@ -50,7 +50,7 @@ function ArtisticCriterion:updateStyle(full_texture_image, image_size)
   self.descriptor_net:forward(texture_image)
 
   for k, module in pairs(self.texture_modules) do
-    print('Updating texture style ', k)
+--  print('Updating texture style ', k)
 
     module.active = true
 

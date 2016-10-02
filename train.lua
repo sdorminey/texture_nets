@@ -18,18 +18,16 @@ end
 ----------------------------------------------------------
 local cmd = torch.CmdLine()
 
-cmd:option('-content_layers', 'relu4_2', 'Layer to attach content loss.')
-cmd:option('-style_layers', 'relu1_1,relu2_1,relu3_1,relu4_1,relu5_1', 'Layer to attach style loss.')
+cmd:option('-content_layers', 'relu7,relu9', 'Layer to attach content loss.')
+cmd:option('-style_layers', 'relu1,relu3,relu5,relu7,relu9', 'Layer to attach style loss.')
 
 cmd:option('-learning_rate', 1e-3, 'Learning rate. Should be reduced to 80% every 2000 iterations.')
 
 cmd:option('-num_iterations', 10, 'Number of steps to perform.')
 cmd:option('-batch_size', 1)
 
-cmd:option('-image_size', 256, 'Training images size')
+cmd:option('-image_size', 320, 'Training images size')
 
-cmd:option('-content_weight', 1)
-cmd:option('-style_weight', 1)
 cmd:option('-tv_weight', 0.001, 'Total variation weight.')
 
 cmd:option('-style_image', '', 'Path to style image')
@@ -44,10 +42,9 @@ cmd:option('-starting_checkpoint', '', 'Starting checkpoint to use.')
 cmd:option('-vgg_no_pad', 'false')
 cmd:option('-normalization', 'instance', 'batch|instance')
 
-cmd:option('-proto_file', 'data/pretrained/VGG_ILSVRC_19_layers_deploy.prototxt', 'Pretrained')
-cmd:option('-model_file', 'data/pretrained/VGG_ILSVRC_19_layers.caffemodel')
+cmd:option('-proto_file', 'data/pretrained/train_val.prototxt', 'Pretrained')
+cmd:option('-model_file', 'data/pretrained/nin_imagenet_conv.caffemodel')
 
-cmd:option('-fader_max', 0.005, 'Max value of fader.')
 cmd:option('-backend', 'cudnn', 'backend to use.')
 
 -- Dataloader
@@ -156,14 +153,14 @@ function feval(x)
 
   -- Fader (range [-1, 1]) determines the mix of style and content.
   -- -1 -> 0 (all content, no style.)
-  --  1 -> fader_max (max ratio between style and content.)
+  --  1 -> 1 (all style, no content.)
   local fader = torch.uniform(torch.Generator(), -1, 1)
 
   -- fader_max controls the ratio between style and content.
 
   -- Pick random values for texture and content strength.
-  local texture_strength = 1000 -- Denominator!
-  local content_strength = ((fader+1)/2)*params.fader_max*1000
+  local texture_strength = (1+fader)/2
+  local content_strength = 1-texture_strength
   criterion:updateStrength(texture_strength, content_strength)
 
   -- Update the criterion with a random crop of the style image.
@@ -215,6 +212,7 @@ local state = {
 }
 
 for it = 1, params.num_iterations do
+  torch.save(tostring(it) .. '.t7', torch.FloatTensor(1))
 
   -- Optimization step
   optim_method(feval, parameters, state)
