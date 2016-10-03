@@ -18,6 +18,7 @@ cmd:option('-fader2', 1, 'Value of fader, in single mode')
 cmd:option('-period', 50, 'Number of frames between fader periods.')
 cmd:option('-cpu', false, 'use this flag to run on CPU')
 cmd:option('-correct_color', false, 'original colors')
+cmd:option('-gain', 1, 'fader gain.')
 
 local params = cmd:parse(arg)
 
@@ -56,7 +57,7 @@ function eval_inner(source)
   -- Mask is needed so we don't get hit by normalization.
   local mask = torch.ByteTensor({{{0, 1}, {1, 0}}})
   mask = mask:repeatTensor(1, input:size(3)/2, input:size(4)/2)
-  input[1]:select(1, 4):maskedFill(mask, 0)
+  input[1]:select(1, 4):maskedFill(mask, 0):mul(params.gain)
 
   -- Stylize
   local stylized = model:forward(input:type(tp)):double()
