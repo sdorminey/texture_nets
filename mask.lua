@@ -6,6 +6,8 @@ cmd:option('-backs', '', 'path to static images of background.')
 cmd:option('-input', '', 'path to input folder.')
 cmd:option('-output', '', 'path to output folder.')
 cmd:option('-threshold', 1, 'threshold for pixels')
+cmd:option('-start_from', 0, 'Place to start from.')
+cmd:option('-start_backindex', 1, 'Back index to start from.')
 
 -- back: image.
 -- source, dest: filenames.
@@ -41,10 +43,11 @@ local function run(params)
   local back = nil
 
   -- Sort backs. File names match when to switch.
-  local back_index = 1
+  local back_index = params.start_backindex
   local backs = {}
   for file in paths.iterfiles(params.backs) do table.insert(backs, file) end
   table.sort(backs)
+  print(backs)
 
   -- Sort files in the input path.
   local files = {}
@@ -52,16 +55,22 @@ local function run(params)
   table.sort(files)
 
   -- Iterate through sorted files, apply the mask.
+  local counter = params.start_from
   for _,file in pairs(files) do
-    if file == backs[back_index] then
-      back_index = back_index+1
-      back = image.load(paths.concat(params.backs, back[back_index], 3)):float()
+    if counter > 0 then
+      counter = counter-1
+    else
+      if file == backs[back_index] then
+        print('loaded back ' .. backs[back_index])
+        back = image.load(paths.concat(params.backs, backs[back_index]), 3):float()
+        back_index = back_index+1
+      end
+
+      local source = paths.concat(params.input, file)
+      local dest = paths.concat(params.output, file)
+
+      mask(back, params.threshold, source, dest)
     end
-
-    local source = paths.concat(params.input, file)
-    local dest = paths.concat(params.output, file)
-
-    mask(back, params.threshold, source, dest)
   end
 end
 
