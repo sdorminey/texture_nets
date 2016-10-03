@@ -11,6 +11,7 @@ cmd:option('-compare', false, 'Run in compare mode')
 cmd:option('-scale', 1, 'Scale factor for input images.')
 cmd:option('-input', '', 'Paths of image to stylize.')
 cmd:option('-output', '', 'Path to save stylized image.')
+cmd:option('-masks', '', 'Path to masks to use for fader (batch only!)')
 cmd:option('-model_t7', '', 'Path to trained model.')
 cmd:option('-fader1', -1, 'Value of fader, in single mode')
 cmd:option('-fader2', 1, 'Value of fader, in single mode')
@@ -42,31 +43,28 @@ local index = 0
 -- Combine the Y channel of the generated image and the UV channels of the
 -- content image to perform color-independent style transfer.
 function original_colors(content, generated)
+  print(content:size(), generated:size())
   local generated_y = image.rgb2yuv(generated)[{{1, 1}}]
   local content_uv = image.rgb2yuv(content)[{{2, 3}}]
   return image.yuv2rgb(torch.cat(generated_y, content_uv, 1))
 end
 
-function eval(source_img, fader)
-  -- Insert fader channel.
-  local img = source_img:clone()
-  img:resize(1, 1+img:size(1), img:size(2), img:size(3))
-  img:zero()
-  img:sub(1, -1, 1, 3):copy(source_img)
+-- Takes a 1x4xMxN tensor (1-3 = RGB, 4 = Fader.)
+function eval_inner(source)
+  local input = source
 
   -- Mask is needed so we don't get hit by normalization.
   local mask = torch.ByteTensor({{{0, 1}, {1, 0}}})
-  mask = mask:repeatTensor(1, img:size(3)/2, img:size(4)/2)
-  img[1]:select(1, 4):maskedFill(mask, fader)
+  mask = mask:repeatTensor(1, input:size(3)/2, input:size(4)/2)
+  input[1]:select(1, 4):maskedFill(mask, 0)
 
   -- Stylize
-  local input = img
   local stylized = model:forward(input:type(tp)):double()
   stylized = deprocess(stylized[1])
 
   -- Maybe color correct.
   if params.correct_color then
-    stylized = original_colors(source_img:double(), stylized:double())
+    stylized = original_colors(input[{1, {1, 3}}]:double(), stylized:double())
   end
 
   local conv_nodes = model:findModules('cudnn.SpatialConvolution')
@@ -74,8 +72,30 @@ function eval(source_img, fader)
   local view = out1:squeeze():view(32,-1)
   print('min: ', view:min(), 'max:', view:max())
 
-
   return stylized
+end
+
+-- Applies a scalar fader.
+function eval(source_img, fader)
+  -- Insert fader channel.
+  local img = source_img:clone()
+  img:resize(1, 1+img:size(1), img:size(2), img:size(3))
+  img:zero()
+  img:sub(1, -1, 1, 3):copy(source_img)
+
+  return eval_inner(img)
+end
+
+-- Applies a mask of faders.
+-- Mask is simple MxN tensor.
+function eval_mask(source_img, mask)
+  local img = source_img:clone()
+  img:resize(1, 1+img:size(1), img:size(2), img:size(3))
+  img:zero()
+  img:sub(1, -1, 1, 3):copy(source_img)
+  img[1][4]:copy(mask)
+
+  return eval_inner(img)
 end
 
 function compare_images(source, dest, fader1, fader2)
@@ -95,7 +115,7 @@ function compare_images(source, dest, fader1, fader2)
 end
 
 function apply(source, dest, fader)
-  print("Processing image " .. source .. "with fader " .. tostring(fader))
+  print("Processing image " .. source .. " with fader " .. tostring(fader))
   weights, gradWeights = model:parameters()
 
   -- Load
@@ -110,6 +130,26 @@ function apply(source, dest, fader)
   image.save(dest, torch.clamp(torch.abs(stylized),0,1))
 end
 
+function apply_with_mask(source, dest, mask_path)
+  print("Processing image " .. source .. " with masks from ".. mask_path)
+  weights, gradWeights = model:parameters()
+
+  -- Load content image.
+  local source_img = image.load(source, 3):float()
+  if params.scale ~=1 then
+    source_img = image.scale(source_img, source_img:size(3)*params.scale, source_img:size(2)*params.scale)
+  end
+
+  -- Load fader mask.
+  local fader_mask = image.load(mask_path, 3):float()
+
+  -- Apply style.
+  local stylized = eval_mask(source_img, fader_mask[1])
+
+  -- Save
+  image.save(dest, torch.clamp(torch.abs(stylized),0,1))
+end
+
 if params.batch then
     local files = {}
     for file in paths.iterfiles(params.input) do table.insert(files, file) end
@@ -119,11 +159,17 @@ if params.batch then
       local source = paths.concat(params.input, file)
       local dest = paths.concat(params.output, file)
 
-      -- Fader cycles between fader1 and fader2 every period (fader1 < fader2, duh.)
-      local wave = torch.sin((2*math.pi/params.period)*index)
-      local fader = params.fader1 + (params.fader2-params.fader1) * (wave+1)/2
+      local fader = 0
+      if params.masks ~= '' then
+        local mask = paths.concat(params.masks, file)
+        apply_with_mask(source, dest, mask)
+      else
+        -- Fader cycles between fader1 and fader2 every period (fader1 < fader2, duh.)
+        local wave = torch.sin((2*math.pi/params.period)*index)
+        fader = params.fader1 + (params.fader2-params.fader1) * (wave+1)/2
 
-      apply(source, dest, fader)
+        apply(source, dest, fader)
+      end
 
       index = index+1
     end
