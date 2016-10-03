@@ -6,13 +6,19 @@ cmd:option('-backs', '', 'path to static images of background.')
 cmd:option('-input', '', 'path to input folder.')
 cmd:option('-output', '', 'path to output folder.')
 cmd:option('-threshold', 1, 'threshold for pixels')
+cmd:option('-scale', 1, 'scale images.')
 cmd:option('-start_from', 0, 'Place to start from.')
 cmd:option('-start_backindex', 1, 'Back index to start from.')
+
+local params = cmd:parse(arg)
 
 -- back: image.
 -- source, dest: filenames.
 local function mask(back, threshold, source, dest)
   local fore = image.load(source, 3):float()
+  if params.scale ~= 1 then
+    fore = image.scale(fore, fore:size(3)*params.scale, fore:size(2)*params.scale)
+  end
 
   if back == nil then
     back = torch.FloatTensor():resizeAs(fore)
@@ -63,6 +69,9 @@ local function run(params)
       if file == backs[back_index] then
         print('loaded back ' .. backs[back_index])
         back = image.load(paths.concat(params.backs, backs[back_index]), 3):float()
+        if params.scale ~= 1 then
+          back = image.scale(back, back:size(3)*params.scale, back:size(2)*params.scale)
+        end
         back_index = back_index+1
       end
 
@@ -74,5 +83,4 @@ local function run(params)
   end
 end
 
-local params = cmd:parse(arg)
 run(params)

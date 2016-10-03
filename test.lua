@@ -19,6 +19,7 @@ cmd:option('-period', 50, 'Number of frames between fader periods.')
 cmd:option('-cpu', false, 'use this flag to run on CPU')
 cmd:option('-correct_color', false, 'original colors')
 cmd:option('-gain', 1, 'fader gain.')
+cmd:option('-start_from', 0, '')
 
 local params = cmd:parse(arg)
 
@@ -57,7 +58,8 @@ function eval_inner(source)
   -- Mask is needed so we don't get hit by normalization.
   local mask = torch.ByteTensor({{{0, 1}, {1, 0}}})
   mask = mask:repeatTensor(1, input:size(3)/2, input:size(4)/2)
-  input[1]:select(1, 4):maskedFill(mask, 0):mul(params.gain)
+  print(input[1]:size())
+  input[1]:select(1, 4):maskedFill(mask, 0)
 
   -- Stylize
   local stylized = model:forward(input:type(tp)):double()
@@ -143,6 +145,7 @@ function apply_with_mask(source, dest, mask_path)
 
   -- Load fader mask.
   local fader_mask = image.load(mask_path, 3):float()
+  print(fader_mask[1]:size())
 
   -- Apply style.
   local stylized = eval_mask(source_img, fader_mask[1])
@@ -156,12 +159,17 @@ if params.batch then
     for file in paths.iterfiles(params.input) do table.insert(files, file) end
     table.sort(files)
 
+    local counter = params.start_from
     for _,file in pairs(files) do
-      local source = paths.concat(params.input, file)
-      local dest = paths.concat(params.output, file)
-      local mask = paths.concat(params.masks, file)
+      if counter > 0 then
+        counter = counter-1
+      else
+        local source = paths.concat(params.input, file)
+        local dest = paths.concat(params.output, file)
+        local mask = paths.concat(params.masks, file)
 
-      apply_with_mask(source, dest, mask)
+        apply_with_mask(source, dest, mask)
+      end
 
       index = index+1
     end
