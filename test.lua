@@ -158,18 +158,9 @@ if params.batch then
     for _,file in pairs(files) do
       local source = paths.concat(params.input, file)
       local dest = paths.concat(params.output, file)
+      local mask = paths.concat(params.masks, file)
 
-      local fader = 0
-      if params.masks ~= '' then
-        local mask = paths.concat(params.masks, file)
-        apply_with_mask(source, dest, mask)
-      else
-        -- Fader cycles between fader1 and fader2 every period (fader1 < fader2, duh.)
-        local wave = torch.sin((2*math.pi/params.period)*index)
-        fader = params.fader1 + (params.fader2-params.fader1) * (wave+1)/2
-
-        apply(source, dest, fader)
-      end
+      apply_with_mask(source, dest, mask)
 
       index = index+1
     end

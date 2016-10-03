@@ -18,9 +18,9 @@ function chop(source_path, border)
   local w = source:size(3)
 
   local q0 = source[{{}, {1, h/2+border}, {1, w/2+border}}]
-  local q1 = source[{{}, {1, h/2+border}, {w/2-border, w}}]
-  local q2 = source[{{}, {h/2-border, h}, {1, w/2+border}}]
-  local q3 = source[{{}, {h/2-border, h}, {w/2-border, w}}]
+  local q1 = source[{{}, {1, h/2+border}, {w/2-border+1, w}}]
+  local q2 = source[{{}, {h/2-border+1, h}, {1, w/2+border}}]
+  local q3 = source[{{}, {h/2-border+1, h}, {w/2-border+1, w}}]
 
   image.save(paths.concat(params.output, source_filename .. '.0.jpg'), q0)
   image.save(paths.concat(params.output, source_filename .. '.1.jpg'), q1)
