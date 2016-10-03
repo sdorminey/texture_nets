@@ -1,3 +1,4 @@
+require 'torch'
 require 'nn'
 require 'image'
 require 'InstanceNormalization'
@@ -12,10 +13,10 @@ cmd:option('-input', '', 'Paths of image to stylize.')
 cmd:option('-output', '', 'Path to save stylized image.')
 cmd:option('-model_t7', '', 'Path to trained model.')
 cmd:option('-fader1', -1, 'Value of fader, in single mode')
-cmd:option('-fader2', -0.5, 'Value of fader, in single mode')
+cmd:option('-fader2', 1, 'Value of fader, in single mode')
 cmd:option('-period', 50, 'Number of frames between fader periods.')
 cmd:option('-cpu', false, 'use this flag to run on CPU')
-cmd:option('-original_colors', false, 'original colors')
+cmd:option('-correct_color', false, 'original colors')
 
 local params = cmd:parse(arg)
 
@@ -38,6 +39,14 @@ model:evaluate()
 
 local index = 0
 
+-- Combine the Y channel of the generated image and the UV channels of the
+-- content image to perform color-independent style transfer.
+function original_colors(content, generated)
+  local generated_y = image.rgb2yuv(generated)[{{1, 1}}]
+  local content_uv = image.rgb2yuv(content)[{{2, 3}}]
+  return image.yuv2rgb(torch.cat(generated_y, content_uv, 1))
+end
+
 function eval(source_img, fader)
   -- Insert fader channel.
   local img = source_img:clone()
@@ -55,10 +64,16 @@ function eval(source_img, fader)
   local stylized = model:forward(input:type(tp)):double()
   stylized = deprocess(stylized[1])
 
+  -- Maybe color correct.
+  if params.correct_color then
+    stylized = original_colors(source_img:double(), stylized:double())
+  end
+
   local conv_nodes = model:findModules('cudnn.SpatialConvolution')
   local out1 = conv_nodes[1].output
   local view = out1:squeeze():view(32,-1)
   print('min: ', view:min(), 'max:', view:max())
+
 
   return stylized
 end
