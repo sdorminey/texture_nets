@@ -7,11 +7,12 @@ local cmd = torch.CmdLine()
 
 cmd:option('-batch', false, 'Run in batch mode')
 cmd:option('-compare', false, 'Run in compare mode')
+cmd:option('-scale', 1, 'Scale factor for input images.')
 cmd:option('-input', '', 'Paths of image to stylize.')
 cmd:option('-output', '', 'Path to save stylized image.')
 cmd:option('-model_t7', '', 'Path to trained model.')
-cmd:option('-fader1', 0, 'Value of fader, in single mode')
-cmd:option('-fader2', 2, 'Value of fader, in single mode')
+cmd:option('-fader1', -1, 'Value of fader, in single mode')
+cmd:option('-fader2', -0.5, 'Value of fader, in single mode')
 cmd:option('-period', 50, 'Number of frames between fader periods.')
 cmd:option('-cpu', false, 'use this flag to run on CPU')
 
@@ -83,6 +84,9 @@ function apply(source, dest, fader)
 
   -- Load
   local source_img = image.load(source, 3):float()
+  if params.scale ~=1 then
+    source_img = image.scale(source_img, source_img:size(3)*params.scale, source_img:size(2)*params.scale)
+  end
 
   local stylized = eval(source_img, fader)
 
@@ -99,8 +103,9 @@ if params.batch then
       local source = paths.concat(params.input, file)
       local dest = paths.concat(params.output, file)
 
-      -- Fader cycles between 1 and -1 every period.
-      local fader = torch.sin((2*math.pi/params.period)*index)
+      -- Fader cycles between fader1 and fader2 every period (fader1 < fader2, duh.)
+      local wave = torch.sin((2*math.pi/params.period)*index)
+      local fader = params.fader1 + (params.fader2-params.fader1) * (wave+1)/2
 
       apply(source, dest, fader)
 
