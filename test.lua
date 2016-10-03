@@ -15,6 +15,7 @@ cmd:option('-fader1', -1, 'Value of fader, in single mode')
 cmd:option('-fader2', -0.5, 'Value of fader, in single mode')
 cmd:option('-period', 50, 'Number of frames between fader periods.')
 cmd:option('-cpu', false, 'use this flag to run on CPU')
+cmd:option('-original_colors', false, 'original colors')
 
 local params = cmd:parse(arg)
 
