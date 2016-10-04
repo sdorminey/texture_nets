@@ -10,28 +10,66 @@ cmd:option('-output', '', 'Path to output images.')
 
 local params = cmd:parse(arg)
 
-function ourmul(a, b)
-  local temp = a:clone():zero()
-  temp:addcmul(2, a, b)
-  return temp
+function make_square(b)
+  local square = torch.FloatTensor(b,b)
+  local k = 0
+  square:apply(
+    function(x)
+      local p = torch.floor(k / square:stride(1))
+      local q = k % square:stride(1)
+      k=k+1
+      return (b - torch.sqrt(p*p + q*q))/b
+    end)
+  return square
 end
 
 function shaded_box(h, w, b)
-  grad = torch.FloatTensor(h+b):zero()
-  k = h+b+1
-  grad:apply(function(x) k=k-1; return k/(h+b); end)
+  fade = torch.FloatTensor(b):zero()
+  k = b-1
+  fade:apply(function(x) v = ((b/(b-1))*k)/b; k=k-1; return v; end)
 
-  down = grad:repeatTensor(w+b, 1):t():clone()
-  right = grad:repeatTensor(w+b, 1):clone()
+  s = fade:repeatTensor(b,1)
+  local square = torch.add(torch.tril(s:t()), torch.triu(s, 1))
+  square[{{square:size(1)/2+1, -1}, {square:size(2)/2+1, -1}}]:zero() -- Reduces the overlap.
 
-  print(w-h)
-  print(down:size())
-  down:triu(w-h)[{{1, h}, {1, w}}]:zero()
-  right:t():tril(w-h-1)[{{1, h}, {1, w}}]:zero()
+  south = fade:repeatTensor(w, 1):t():clone()
+  print(h, w, b)
+  east = fade:repeatTensor(h, 1):clone()
 
-  down:add(right)
-  down[{{1, h}, {1, w}}]:fill(1)
-  return down:repeatTensor(3,1,1)
+  box = torch.ones(h+b, w+b):float()
+  box[{{1, h}, {w+1, w+b}}] = east
+  box[{{h+1, h+b}, {1, w}}] = south
+  box[{{h+1, h+b}, {w+1, w+b}}] = square
+  print(box:min(), box:max())
+  box = box:repeatTensor(3,1,1)
+  return box
+end
+
+-- 0 1
+-- 2 3
+function apply(q0, q1, q2, q3, border)
+  local h = (q0:size(2)-border)*2
+  local w = (q0:size(3)-border)*2
+
+  local box = shaded_box(q0:size(2)-border*2, q0:size(3)-border*2, border*2)
+
+  q0 = torch.cmul(q0, box)
+  image.save('q0.jpg', q0)
+  q1 = image.hflip(torch.cmul(image.hflip(q1), box))
+  image.save('q1.jpg', q1)
+  q2 = image.vflip(torch.cmul(image.vflip(q2), box))
+  image.save('q2.jpg', q2)
+  q3 = image.hflip(image.vflip(torch.cmul(image.vflip(image.hflip(q3)), box)))
+  image.save('q3.jpg', q3)
+
+  local out = torch.Tensor(q0:size(1), h, w):float()
+  out[{{}, {1, h/2+border}, {1, w/2+border}}]:add(q0)
+  out[{{}, {1, h/2+border}, {w/2+1-border, w}}]:add(q1)
+  out[{{}, {h/2+1-border, h}, {1, w/2+border}}]:add(q2)
+  out[{{}, {h/2+1-border, h}, {w/2+1-border, w}}]:add(q3)
+  print(out:min(), out:max())
+
+  return out
 end
 
 function unchop(source_filename)
@@ -42,32 +80,9 @@ function unchop(source_filename)
   local q2 = image.load(paths.concat(params.quads, source_filename .. '.2.jpg'), 3):float()
   local q3 = image.load(paths.concat(params.quads, source_filename .. '.3.jpg'), 3):float()
 
-  local target = source:zero()
+  print(q0:size(2), source:size(2)/2)
 
-  local h = source:size(2)
-  local w = source:size(3)
-  local b = q0:size(3) - source:size(3)/2
-
-  -- Add in whole images, including overlapping borders.
-  print(shaded_box(h/2, w/2,b):size())
-  local b0 = ourmul(q0, shaded_box(h/2, w/2, b))
-  local b1 = image.hflip(q1)
-  b1 = ourmul(b1, shaded_box(h/2, w/2, b))
-  b1 = image.hflip(b1)
-  local b2 = image.vflip(q2)
-  b2 = ourmul(b2, shaded_box(h/2, w/2, b))
-  b2 = image.vflip(q2)
-  local b3 = image.hflip(q3)
-  b3 = image.vflip(b3)
-  b3 = ourmul(b3,shaded_box(h/2, w/2, b))
-  b3 = image.vflip(b3)
-  b3 = image.hflip(b3)
-
-  target[{{}, {1, h/2+b}, {1, w/2+b}}]:add(b0)
---  target[{{}, {1, h/2+b}, {w/2-b+1, w}}]:add(b1)
---  target[{{}, {h/2-b+1, h}, {1, w/2+b}}]:add(b2)
---  target[{{}, {h/2-b+1, h}, {w/2-b+1, w}}]:add(b3)
-
+  local target = apply(q0, q1, q2, q3, q0:size(2) - (source:size(2)/2))
   image.save(paths.concat(params.output, source_filename), target)
 end
 
