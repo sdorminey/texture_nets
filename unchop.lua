@@ -4,6 +4,7 @@ require 'image'
 
 local cmd = torch.CmdLine()
 
+cmd:option('-single', '', 'Do a single one.')
 cmd:option('-input', '', 'Path to input images.')
 cmd:option('-quads', '', 'Path to transformed quadrants made from the input images.')
 cmd:option('-output', '', 'Path to output images.')
@@ -70,7 +71,6 @@ end
 
 function unchop(source_filename)
   local source = image.load(paths.concat(params.input, source_filename), 3):float()
-
   local q0 = image.load(paths.concat(params.quads, source_filename .. '.0.jpg'), 3):float()
   local q1 = image.load(paths.concat(params.quads, source_filename .. '.1.jpg'), 3):float()
   local q2 = image.load(paths.concat(params.quads, source_filename .. '.2.jpg'), 3):float()
@@ -82,18 +82,22 @@ function unchop(source_filename)
   image.save(paths.concat(params.output, source_filename), target)
 end
 
--- Sort files in the input path.
-local files = {}
-for file in paths.iterfiles(params.input) do table.insert(files, file) end
-table.sort(files)
+if params.single then
+  unchop(params.single)
+else
+  -- Sort files in the input path.
+  local files = {}
+  for file in paths.iterfiles(params.input) do table.insert(files, file) end
+  table.sort(files)
 
-local counter = params.start_from
--- Iterate through sorted files, apply the mask.
-for _,file in pairs(files) do
-  if counter > 0 then
-    counter = counter-1
-  else
-    print(file)
-    unchop(file)
+  local counter = params.start_from
+  -- Iterate through sorted files, apply the mask.
+  for _,file in pairs(files) do
+    if counter > 0 then
+      counter = counter-1
+    else
+      print(file)
+      unchop(file)
+    end
   end
 end

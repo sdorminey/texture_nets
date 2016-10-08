@@ -7,6 +7,7 @@ require 'src/utils'
 local cmd = torch.CmdLine()
 
 cmd:option('-batch', false, 'Run in batch mode')
+cmd:option('-cycle', false, 'Run in cycle mode')
 cmd:option('-compare', false, 'Run in compare mode')
 cmd:option('-scale', 1, 'Scale factor for input images.')
 cmd:option('-input', '', 'Paths of image to stylize.')
@@ -14,12 +15,13 @@ cmd:option('-output', '', 'Path to save stylized image.')
 cmd:option('-masks', '', 'Path to masks to use for fader (batch only!)')
 cmd:option('-model_t7', '', 'Path to trained model.')
 cmd:option('-fader1', -1, 'Value of fader, in single mode')
-cmd:option('-fader2', 1, 'Value of fader, in single mode')
-cmd:option('-period', 50, 'Number of frames between fader periods.')
+cmd:option('-fader2', 0, 'Value of fader, in single mode')
+cmd:option('-period', 150, 'Number of frames between fader periods.')
 cmd:option('-cpu', false, 'use this flag to run on CPU')
 cmd:option('-correct_color', false, 'original colors')
 cmd:option('-gain', 1, 'fader gain.')
 cmd:option('-start_from', 0, '')
+cmd:option('-quad', false, 'Processing quads')
 
 local params = cmd:parse(arg)
 
@@ -85,6 +87,7 @@ function eval(source_img, fader)
   img:resize(1, 1+img:size(1), img:size(2), img:size(3))
   img:zero()
   img:sub(1, -1, 1, 3):copy(source_img)
+  img[{{}, 4}]:fill(fader)
 
   return eval_inner(img)
 end
@@ -154,25 +157,53 @@ function apply_with_mask(source, dest, mask_path)
   image.save(dest, torch.clamp(torch.abs(stylized),0,1))
 end
 
-if params.batch then
-    local files = {}
-    for file in paths.iterfiles(params.input) do table.insert(files, file) end
-    table.sort(files)
+if params.cycle then
+  local files = {}
+  for file in paths.iterfiles(params.input) do table.insert(files, file) end
+  table.sort(files)
 
-    local counter = params.start_from
-    for _,file in pairs(files) do
-      if counter > 0 then
-        counter = counter-1
-      else
-        local source = paths.concat(params.input, file)
-        local dest = paths.concat(params.output, file)
-        local mask = paths.concat(params.masks, file)
+  local frame_index = 0
 
-        apply_with_mask(source, dest, mask)
-      end
+  for _,file in pairs(files) do
+    local source = paths.concat(params.input, file)
+    local dest = paths.concat(params.output, file)
 
-      index = index+1
+    local index = 0
+    if params.quad then
+      index = torch.floor(frame_index/4)
+    else
+      index = frame_index
     end
+
+    -- Fader cycles between fader1 and fader2 every period (fader1 < fader2, duh.)
+    local wave = torch.sin((2*math.pi/params.period)*index)
+    local wave01 = (wave+1)/2
+
+    local fader = wave01 * params.fader1 + params.fader2 * (1 - wave01)
+
+    apply(source, dest, fader)
+
+    frame_index = frame_index+1
+  end
+elseif params.batch then
+  local files = {}
+  for file in paths.iterfiles(params.input) do table.insert(files, file) end
+  table.sort(files)
+
+  local counter = params.start_from
+  for _,file in pairs(files) do
+    if counter > 0 then
+      counter = counter-1
+    else
+      local source = paths.concat(params.input, file)
+      local dest = paths.concat(params.output, file)
+      local mask = paths.concat(params.masks, file)
+
+      apply_with_mask(source, dest, mask)
+    end
+
+    index = index+1
+  end
 elseif params.compare then
   compare_images(params.input, params.output, params.fader1, params.fader2)
 else
