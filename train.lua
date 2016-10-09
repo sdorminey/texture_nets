@@ -18,7 +18,7 @@ end
 ----------------------------------------------------------
 local cmd = torch.CmdLine()
 
-cmd:option('-content_layers', 'relu7,relu9', 'Layer to attach content loss.')
+cmd:option('-content_layers', 'relu7,relu9,relu11', 'Layer to attach content loss.')
 cmd:option('-style_layers', 'relu1,relu3,relu5,relu7,relu9', 'Layer to attach style loss.')
 
 cmd:option('-learning_rate', 1e-3, 'Learning rate. Should be reduced to 80% every 2000 iterations.')
@@ -26,7 +26,7 @@ cmd:option('-learning_rate', 1e-3, 'Learning rate. Should be reduced to 80% ever
 cmd:option('-num_iterations', 10, 'Number of steps to perform.')
 cmd:option('-batch_size', 1)
 
-cmd:option('-image_size', 320, 'Training images size')
+cmd:option('-image_size', 256, 'Training images size')
 
 cmd:option('-tv_weight', 0.001, 'Total variation weight.')
 
@@ -118,7 +118,7 @@ else
     print('Using starting checkpoint.')
     net = torch.load(params.starting_checkpoint)
     if params.backend == 'cudnn' then
-      net = cudnn.convert(net, nn)
+      net = cudnn.convert(net, cudnn)
       net:type(dtype)
     end
 end
@@ -186,6 +186,7 @@ function feval(x)
 
   collectgarbage()
   -- Forward
+  print(images_input:size())
   local out = net:forward(images_input)
   loss = loss + criterion:forward({out, images_target})
   
@@ -206,28 +207,18 @@ end
 ----------------------------------------------------------
 print('        Optimize        ')
 
-local optim_method = optim.adam
+local optim_method = optim.lbfgs
 local state = {
-   learningRate = params.learning_rate,
+   maxIter = params.num_iterations,
+   verbose=true,
 }
 
-for it = 1, params.num_iterations do
-  torch.save(tostring(it) .. '.t7', torch.FloatTensor(1))
+-- Optimization step
+optim_method(feval, parameters, state)
 
-  -- Optimization step
-  optim_method(feval, parameters, state)
-
-  -- GC.
-  if it%50 == 0 then
-    collectgarbage()
-  end
-  
-  -- Dump net
-  if it == params.num_iterations then 
-    local net_to_save = deepCopy(net):float():clearState()
-    if params.backend == 'cudnn' then
-      net_to_save = cudnn.convert(net_to_save, nn)
-    end
-    torch.save(paths.concat(params.out), net_to_save)
-  end
+-- Dump net
+local net_to_save = deepCopy(net):float():clearState()
+if params.backend == 'cudnn' then
+  net_to_save = cudnn.convert(net_to_save, nn)
 end
+torch.save(paths.concat(params.out), net_to_save)

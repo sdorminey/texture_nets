@@ -18,6 +18,7 @@ cmd:option('-fader2', 1, 'Value of fader, in single mode')
 cmd:option('-period', 50, 'Number of frames between fader periods.')
 cmd:option('-cpu', false, 'use this flag to run on CPU')
 cmd:option('-correct_color', false, 'original colors')
+cmd:option('-start_from', 0, 'starting positition.')
 
 local params = cmd:parse(arg)
 
@@ -155,13 +156,17 @@ if params.batch then
     for file in paths.iterfiles(params.input) do table.insert(files, file) end
     table.sort(files)
 
+    counter = params.start_from
     for _,file in pairs(files) do
-      local source = paths.concat(params.input, file)
-      local dest = paths.concat(params.output, file)
-      local mask = paths.concat(params.masks, file)
+      if counter > 1 then
+        counter = counter-1
+      else
+        local source = paths.concat(params.input, file)
+        local dest = paths.concat(params.output, file)
+        local mask = paths.concat(params.masks, file)
 
-      apply_with_mask(source, dest, mask)
-
+        apply_with_mask(source, dest, mask)
+      end
       index = index+1
     end
 elseif params.compare then
