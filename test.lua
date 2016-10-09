@@ -47,9 +47,10 @@ local index = 0
 -- Combine the Y channel of the generated image and the UV channels of the
 -- content image to perform color-independent style transfer.
 function original_colors(content, generated)
-  print(content:size(), generated:size())
   local generated_y = image.rgb2yuv(generated)[{{1, 1}}]
-  local content_uv = image.rgb2yuv(content)[{{2, 3}}]
+  local content_yuv = image.rgb2yuv(content)
+  generated_y = generated_y - generated_y:mean() + content_yuv[1]:mean()
+  local content_uv = content_yuv[{{2, 3}}]
   return image.yuv2rgb(torch.cat(generated_y, content_uv, 1))
 end
 
