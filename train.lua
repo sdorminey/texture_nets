@@ -140,7 +140,6 @@ local criterion = nn.ArtisticCriterion(params)
 local iteration = 0
 
 local parameters, gradParameters = net:getParameters()
-local loss_history = {}
 function feval(x)
   iteration = iteration + 1
 
@@ -188,22 +187,19 @@ function feval(x)
   images_input:sub(1, -1, 1, 3):copy(raw_input)
   images_input[1]:select(1, 4):maskedFill(mask, texture_strength-1) -- We want -1 to 1.
 
-  collectgarbage()
   -- Forward
-  print(images_input:size())
   local out = net:forward(images_input)
   loss = loss + criterion:forward({out, images_target})
   
-  collectgarbage()
   -- Backward
   local grad = criterion:backward({out, images_target}, nil)
   net:backward(images_input, grad[1])
 
   loss = loss/params.batch_size
   
-  table.insert(loss_history, {iteration,loss})
   print('#it: ', iteration, 'loss: ', loss, 'texture_strength: ', texture_strength, 'content_strength: ', content_strength)
-  return loss, gradParameters:view(gradParameters:nElement())
+  local dx = gradParameters:view(gradParameters:nElement())
+  return loss, dx
 end
 
 ----------------------------------------------------------
@@ -218,7 +214,7 @@ local state = {
 }
 
 -- Optimization step
-optim_method(feval, parameters, state)
+optim_method(feval, parameters:view(parameters:nElement()), state)
 
 -- Dump net
 local net_to_save = deepCopy(net):float():clearState()
