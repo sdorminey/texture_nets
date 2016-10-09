@@ -144,6 +144,10 @@ local loss_history = {}
 function feval(x)
   iteration = iteration + 1
 
+  -- Okay, it's really confusing but gradParameters is zeroed because
+  -- it's a reference to the actual parameter storage for the generator net.
+  -- it's zeroed every time so that it can be calculated during the backward pass below.
+  -- Dmitry!!!!!
   if x ~= parameters then
       parameters:copy(x)
   end
@@ -199,7 +203,7 @@ function feval(x)
   
   table.insert(loss_history, {iteration,loss})
   print('#it: ', iteration, 'loss: ', loss, 'texture_strength: ', texture_strength, 'content_strength: ', content_strength)
-  return loss, gradParameters
+  return loss, gradParameters:view(gradParameters:nElement())
 end
 
 ----------------------------------------------------------
